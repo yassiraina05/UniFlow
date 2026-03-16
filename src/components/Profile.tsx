@@ -1,0 +1,248 @@
+import React, { useState } from 'react';
+import { motion } from 'motion/react';
+import { 
+  User as UserIcon, 
+  Settings as SettingsIcon, 
+  Palette, 
+  Layout, 
+  Shield, 
+  Bell,
+  Check,
+  ChevronRight
+} from 'lucide-react';
+import { User, UserSettings } from '../types';
+
+interface ProfileProps {
+  user: User;
+  setUser: (user: User) => void;
+  token: string;
+  onLogout: () => void;
+}
+
+const ACCENT_COLORS = [
+  { name: 'Olive', value: '#5A5A40' },
+  { name: 'Indigo', value: '#4F46E5' },
+  { name: 'Emerald', value: '#10B981' },
+  { name: 'Rose', value: '#F43F5E' },
+  { name: 'Amber', value: '#F59E0B' },
+  { name: 'Slate', value: '#141414' },
+];
+
+export default function Profile({ user, setUser, token, onLogout }: ProfileProps) {
+  const [settings, setSettings] = useState<UserSettings>(user.settings || {});
+  const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications'>('general');
+
+  const updateSettings = (newSettings: UserSettings) => {
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+    
+    // Immediate preview
+    if (newSettings.theme) {
+      document.documentElement.setAttribute('data-theme', newSettings.theme);
+    }
+    if (newSettings.accentColor) {
+      document.documentElement.style.setProperty('--accent', newSettings.accentColor);
+    }
+  };
+
+  const handleSaveAll = async () => {
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/user/settings', {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(settings)
+      });
+      if (res.ok) {
+        const updatedUser = { ...user, settings };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        alert('All changes saved successfully!');
+      }
+    } catch (err) {
+      console.error("Failed to update settings", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 pb-20">
+      <div className="flex items-center justify-between mb-12">
+        <div className="flex items-center gap-6">
+          <button 
+            onClick={() => setActiveTab('general')}
+            className="w-24 h-24 rounded-3xl bg-accent flex items-center justify-center text-white text-4xl font-bold shadow-xl hover:scale-105 transition-transform cursor-pointer"
+          >
+            {user.name[0].toUpperCase()}
+          </button>
+          <div>
+            <h2 className="text-3xl font-serif italic font-bold">{user.name}</h2>
+            <p className="text-app-text/40 font-medium">{user.email}</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="px-3 py-1 bg-app-text/5 rounded-full text-[10px] font-bold uppercase tracking-widest text-app-text/40">University Student</span>
+              <span className="px-3 py-1 bg-emerald-500/10 rounded-full text-[10px] font-bold uppercase tracking-widest text-emerald-600">Premium Account</span>
+            </div>
+          </div>
+        </div>
+        <button 
+          onClick={onLogout}
+          className="px-6 py-3 bg-red-500/10 text-red-500 rounded-2xl font-bold hover:bg-red-500/20 transition-all flex items-center gap-2"
+        >
+          Sign Out
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Navigation */}
+        <div className="md:col-span-1 space-y-2">
+          <button 
+            onClick={() => setActiveTab('general')}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all font-bold ${activeTab === 'general' ? 'bg-card border-border-subtle shadow-sm text-accent' : 'border-transparent text-app-text/40 hover:bg-card/50'}`}
+          >
+            <div className="flex items-center gap-3">
+              <SettingsIcon size={20} /> General
+            </div>
+            <ChevronRight size={16} />
+          </button>
+          <button 
+            onClick={() => setActiveTab('security')}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all font-bold ${activeTab === 'security' ? 'bg-card border-border-subtle shadow-sm text-accent' : 'border-transparent text-app-text/40 hover:bg-card/50'}`}
+          >
+            <div className="flex items-center gap-3">
+              <Shield size={20} /> Security
+            </div>
+            <ChevronRight size={16} />
+          </button>
+          <button 
+            onClick={() => setActiveTab('notifications')}
+            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all font-bold ${activeTab === 'notifications' ? 'bg-card border-border-subtle shadow-sm text-accent' : 'border-transparent text-app-text/40 hover:bg-card/50'}`}
+          >
+            <div className="flex items-center gap-3">
+              <Bell size={20} /> Notifications
+            </div>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* Settings Content */}
+        <div className="md:col-span-2 space-y-8">
+          {activeTab === 'general' ? (
+            <section className="bg-card p-8 rounded-3xl border border-border-subtle shadow-sm space-y-8">
+              <div>
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                  <Palette size={24} className="text-accent" /> Appearance
+                </h3>
+                
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-widest text-app-text/40 mb-4">Accent Color</label>
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-4">
+                      {ACCENT_COLORS.map(color => (
+                        <button
+                          key={color.name}
+                          onClick={() => updateSettings({ accentColor: color.value })}
+                          className={`group relative w-full aspect-square rounded-2xl flex items-center justify-center transition-all ${settings.accentColor === color.value ? 'ring-2 ring-offset-4 ring-app-text' : 'hover:scale-105'}`}
+                          style={{ backgroundColor: color.value }}
+                        >
+                          {settings.accentColor === color.value && <Check size={20} className="text-white" />}
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap text-app-text">
+                            {color.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-border-subtle">
+                    <label className="block text-xs font-bold uppercase tracking-widest text-app-text/40 mb-4">Theme Mode</label>
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={() => updateSettings({ theme: 'light' })}
+                        className={`flex-1 p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settings.theme !== 'dark' ? 'border-accent bg-app-bg' : 'border-border-subtle hover:border-app-text/20'}`}
+                      >
+                        <div className="w-full h-12 bg-white rounded-lg border border-border-subtle shadow-sm" />
+                        <span className="text-sm font-bold">Light</span>
+                      </button>
+                      <button 
+                        onClick={() => updateSettings({ theme: 'dark' })}
+                        className={`flex-1 p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${settings.theme === 'dark' ? 'border-accent bg-app-text text-app-bg' : 'border-border-subtle hover:border-app-text/20'}`}
+                      >
+                        <div className="w-full h-12 bg-[#141414] rounded-lg border border-white/10 shadow-sm" />
+                        <span className="text-sm font-bold">Dark</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-8 border-t border-border-subtle">
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                  <Layout size={24} className="text-accent" /> Layout Preference
+                </h3>
+                <div className="flex items-center justify-between p-4 bg-app-bg rounded-2xl">
+                  <div>
+                    <p className="font-bold">Compact Sidebar</p>
+                    <p className="text-xs text-app-text/40">Minimize the sidebar to save screen space.</p>
+                  </div>
+                  <button 
+                    onClick={() => updateSettings({ sidebarCollapsed: !settings.sidebarCollapsed })}
+                    className={`w-12 h-6 rounded-full transition-all relative ${settings.sidebarCollapsed ? 'bg-accent' : 'bg-app-text/10'}`}
+                  >
+                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.sidebarCollapsed ? 'left-7' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+            </section>
+          ) : activeTab === 'security' ? (
+            <section className="bg-card p-8 rounded-3xl border border-border-subtle shadow-sm space-y-6">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Shield size={24} className="text-accent" /> Security Settings
+              </h3>
+              <div className="space-y-4">
+                <button className="w-full p-4 flex items-center justify-between border border-border-subtle rounded-2xl hover:bg-app-bg transition-all">
+                  <span className="font-bold">Change Password</span>
+                  <ChevronRight size={18} />
+                </button>
+                <button className="w-full p-4 flex items-center justify-between border border-border-subtle rounded-2xl hover:bg-app-bg transition-all">
+                  <span className="font-bold">Two-Factor Authentication</span>
+                  <span className="text-xs font-bold text-red-500 uppercase tracking-widest">Disabled</span>
+                </button>
+              </div>
+            </section>
+          ) : (
+            <section className="bg-card p-8 rounded-3xl border border-border-subtle shadow-sm space-y-6">
+              <h3 className="text-xl font-bold flex items-center gap-2">
+                <Bell size={24} className="text-accent" /> Notification Preferences
+              </h3>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 border border-border-subtle rounded-2xl">
+                  <span className="font-bold">Email Notifications</span>
+                  <input type="checkbox" defaultChecked className="w-5 h-5 accent-accent" />
+                </div>
+                <div className="flex items-center justify-between p-4 border border-border-subtle rounded-2xl">
+                  <span className="font-bold">Push Notifications</span>
+                  <input type="checkbox" defaultChecked className="w-5 h-5 accent-accent" />
+                </div>
+              </div>
+            </section>
+          )}
+
+          <div className="flex justify-end">
+            <button 
+              onClick={handleSaveAll}
+              disabled={isSaving}
+              className="px-8 py-3 bg-app-text text-app-bg rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+            >
+              {isSaving ? 'Saving Changes...' : 'Save All Changes'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
