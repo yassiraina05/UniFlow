@@ -162,15 +162,15 @@ export default function App() {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     console.log('Logging out...');
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     try {
       await supabase.auth.signOut();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      setToken(null);
-      setUser(null);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
       setIsLoggingOut(false);
     }
   };

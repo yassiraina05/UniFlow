@@ -32,7 +32,6 @@ export default function Todos({ user, token }: TodosProps) {
     const { data, error } = await supabase
       .from('todos')
       .select('*')
-      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -57,8 +56,7 @@ export default function Todos({ user, token }: TodosProps) {
         .insert([{ 
           task: newTask, 
           due_date: dueDate || null,
-          completed: false,
-          user_id: user.id
+          completed: false
         }])
         .select()
         .single();
