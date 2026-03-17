@@ -48,6 +48,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
     const getAvatarUrl = async () => {
@@ -103,6 +104,8 @@ export default function App() {
         }
       } catch (err) {
         console.error('Session initialization failed:', err);
+      } finally {
+        setIsInitializing(false);
       }
     };
 
@@ -174,6 +177,17 @@ export default function App() {
       setIsLoggingOut(false);
     }
   };
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-app-bg">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+          <p className="text-app-text/40 font-serif italic font-bold text-xl">UniFlow</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!token || !user) {
     return <Auth onLogin={handleLogin} />;
