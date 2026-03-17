@@ -50,26 +50,28 @@ export default function Reminders({ token }: RemindersProps) {
     e.preventDefault();
     if (!title || !remindAt) return;
 
-    const { data, error } = await supabase
-      .from('reminders')
-      .insert([{ 
-        title, 
-        remind_at: remindAt, 
-        priority,
-        completed: false 
-      }])
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('reminders')
+        .insert([{ 
+          title, 
+          remind_at: remindAt, 
+          priority,
+          completed: false 
+        }])
+        .select()
+        .single();
 
-    if (error) {
+      if (error) throw error;
+
+      const newReminder = { ...data, remindAt: data.remind_at };
+      setReminders([...reminders, newReminder].sort((a, b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime()));
+      setTitle('');
+      setRemindAt('');
+    } catch (error) {
       console.error('Error adding reminder:', error);
-      return;
+      alert('Failed to add reminder. Please try again.');
     }
-
-    const newReminder = { ...data, remindAt: data.remind_at };
-    setReminders([...reminders, newReminder].sort((a, b) => new Date(a.remindAt).getTime() - new Date(b.remindAt).getTime()));
-    setTitle('');
-    setRemindAt('');
   };
 
   const toggleReminder = async (id: number, completed: boolean) => {

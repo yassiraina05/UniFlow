@@ -9,21 +9,29 @@ import {
   MoreVertical,
   Save,
   Clock,
-  Tag
+  Tag,
+  Image as ImageIcon,
+  Music,
+  File as FileIcon,
+  Paperclip,
+  X,
+  Upload
 } from 'lucide-react';
-import { Note } from '../types';
+import { Note, User } from '../types';
 import { supabase } from '../supabaseClient';
 
 interface NotesProps {
+  user: User;
   token: string;
 }
 
-export default function Notes({ token }: NotesProps) {
+export default function Notes({ user, token }: NotesProps) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
   const [folders, setFolders] = useState<string[]>(['General', 'University', 'Personal', 'Ideas']);
   const [activeFolder, setActiveFolder] = useState<string>('All');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isAddingFolder, setIsAddingFolder] = useState(false);
 
@@ -33,13 +41,29 @@ export default function Notes({ token }: NotesProps) {
     if (savedFolders) setFolders(JSON.parse(savedFolders));
   }, []);
 
+  // Debounced update for content and title
+  useEffect(() => {
+    if (!activeNote) return;
+    const timer = setTimeout(() => {
+      const original = notes.find(n => n.id === activeNote.id);
+      if (original && (original.title !== activeNote.title || original.content !== activeNote.content)) {
+        updateNote(activeNote.id, { title: activeNote.title, content: activeNote.content });
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [activeNote?.title, activeNote?.content]);
+
   const addFolder = () => {
-    if (!newFolderName.trim() || folders.includes(newFolderName)) return;
-    const updated = [...folders, newFolderName];
-    setFolders(updated);
-    localStorage.setItem('user_folders', JSON.stringify(updated));
-    setNewFolderName('');
-    setIsAddingFolder(false);
+    try {
+      if (!newFolderName.trim() || folders.includes(newFolderName)) return;
+      const updated = [...folders, newFolderName];
+      setFolders(updated);
+      localStorage.setItem('user_folders', JSON.stringify(updated));
+      setNewFolderName('');
+      setIsAddingFolder(false);
+    } catch (err) {
+      console.error('Error adding folder:', err);
+    }
   };
 
   const deleteFolder = (folderName: string) => {
@@ -79,50 +103,139 @@ export default function Notes({ token }: NotesProps) {
   };
 
   const createNote = async () => {
-    const { data, error } = await supabase
-      .from('notes')
-      .insert([{ 
-        title: 'Untitled Note', 
-        content: '', 
-        folder: activeFolder === 'All' ? 'General' : activeFolder 
-      }])
-      .select()
-      .single();
+    console.log('Creating note...');
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .insert([{ 
+          title: 'Untitled Note', 
+          content: '', 
+          folder: activeFolder === 'All' ? 'General' : activeFolder,
+          user_id: user.id
+        }])
+        .select()
+        .single();
 
-    if (error) {
+      if (error) throw error;
+
+      const newNote = { 
+        ...data, 
+        createdAt: data.created_at, 
+        updatedAt: data.updated_at,
+        attachments: data.attachments || []
+      };
+      setNotes([newNote, ...notes]);
+      setActiveNote(newNote);
+    } catch (error) {
       console.error('Error creating note:', error);
-      return;
+      alert('Failed to create note. Please try again.');
     }
+  };
 
-    const newNote = { ...data, createdAt: data.created_at, updatedAt: data.updated_at };
-    setNotes([newNote, ...notes]);
-    setActiveNote(newNote);
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'cover' | 'attachment') => {
+    const file = e.target.files?.[0];
+    if (!file || !activeNote) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const uuid = Math.random().toString(36).substring(2);
+      const featureName = 'notes';
+      const itemId = activeNote.id.toString();
+      const filePath = `${user.id}/${featureName}/${itemId}/${uuid}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('app-files')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get signed URL for immediate display
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from('app-files')
+        .createSignedUrl(filePath, 3600); // 1 hour
+
+      if (signedError) throw signedError;
+
+      if (type === 'cover') {
+        // Delete old cover if exists
+        if (activeNote.cover_url && !activeNote.cover_url.startsWith('http')) {
+           await supabase.storage.from('app-files').remove([activeNote.cover_url]);
+        }
+        
+        await updateNote(activeNote.id, { cover_url: filePath });
+        setActiveNote({ ...activeNote, cover_url: signedData.signedUrl });
+      } else {
+        const newAttachment = {
+          id: uuid,
+          name: file.name,
+          url: filePath, // Store the PATH in DB
+          type: file.type,
+          size: file.size
+        };
+        const updatedAttachments = [...(activeNote.attachments || []), newAttachment];
+        await updateNote(activeNote.id, { attachments: updatedAttachments });
+        
+        // Update active note with signed URL for display
+        const updatedWithSigned = updatedAttachments.map(a => 
+          a.id === uuid ? { ...a, url: signedData.signedUrl } : a
+        );
+        setActiveNote({ ...activeNote, attachments: updatedWithSigned });
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      alert('Upload failed. Make sure the "app-files" bucket exists and is private.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removeAttachment = async (attachmentId: string) => {
+    if (!activeNote) return;
+    const attachment = activeNote.attachments?.find(a => a.id === attachmentId);
+    if (!attachment) return;
+
+    try {
+      // Delete from storage
+      await supabase.storage.from('app-files').remove([attachment.url]);
+      
+      const updatedAttachments = (activeNote.attachments || []).filter(a => a.id !== attachmentId);
+      await updateNote(activeNote.id, { attachments: updatedAttachments });
+      setActiveNote({ ...activeNote, attachments: updatedAttachments });
+    } catch (error) {
+      console.error('Error removing attachment:', error);
+    }
   };
 
   const updateNote = async (id: number, updates: Partial<Note>) => {
     setIsSaving(true);
-    
-    // Prepare updates for Supabase (snake_case)
-    const dbUpdates: any = { ...updates };
-    if (updates.title !== undefined) dbUpdates.title = updates.title;
-    if (updates.content !== undefined) dbUpdates.content = updates.content;
-    if (updates.folder !== undefined) dbUpdates.folder = updates.folder;
-    dbUpdates.updated_at = new Date().toISOString();
+    try {
+      const dbUpdates: any = { ...updates };
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.content !== undefined) dbUpdates.content = updates.content;
+      if (updates.folder !== undefined) dbUpdates.folder = updates.folder;
+      if (updates.cover_url !== undefined) dbUpdates.cover_url = updates.cover_url;
+      if (updates.attachments !== undefined) dbUpdates.attachments = updates.attachments;
+      dbUpdates.updated_at = new Date().toISOString();
 
-    const { error } = await supabase
-      .from('notes')
-      .update(dbUpdates)
-      .eq('id', id);
+      const { error } = await supabase
+        .from('notes')
+        .update(dbUpdates)
+        .eq('id', id);
 
-    if (error) {
+      if (error) throw error;
+      
+      setNotes(prev => prev.map(n => n.id === id ? { ...n, ...updates, updatedAt: dbUpdates.updated_at } : n));
+    } catch (error) {
       console.error('Error updating note:', error);
-    } else {
-      setNotes(notes.map(n => n.id === id ? { ...n, ...updates, updatedAt: dbUpdates.updated_at } : n));
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const deleteNote = async (id: number) => {
+    const noteToDelete = notes.find(n => n.id === id);
+    
     const { error } = await supabase
       .from('notes')
       .delete()
@@ -133,9 +246,63 @@ export default function Notes({ token }: NotesProps) {
       return;
     }
 
+    // Cleanup storage
+    if (noteToDelete) {
+      const pathsToDelete: string[] = [];
+      if (noteToDelete.cover_url && !noteToDelete.cover_url.startsWith('http')) {
+        pathsToDelete.push(noteToDelete.cover_url);
+      }
+      if (noteToDelete.attachments) {
+        noteToDelete.attachments.forEach(a => {
+          if (!a.url.startsWith('http')) pathsToDelete.push(a.url);
+        });
+      }
+      if (pathsToDelete.length > 0) {
+        await supabase.storage.from('app-files').remove(pathsToDelete);
+      }
+    }
+
     setNotes(notes.filter(n => n.id !== id));
     if (activeNote?.id === id) setActiveNote(null);
   };
+
+  // Handle signed URLs for active note
+  useEffect(() => {
+    const getSignedUrls = async () => {
+      if (!activeNote) return;
+      
+      let updated = false;
+      const newActiveNote = { ...activeNote };
+
+      if (activeNote.cover_url && !activeNote.cover_url.startsWith('http')) {
+        const { data } = await supabase.storage.from('app-files').createSignedUrl(activeNote.cover_url, 3600);
+        if (data) {
+          newActiveNote.cover_url = data.signedUrl;
+          updated = true;
+        }
+      }
+
+      if (activeNote.attachments && activeNote.attachments.length > 0) {
+        const paths = activeNote.attachments.filter(a => !a.url.startsWith('http')).map(a => a.url);
+        if (paths.length > 0) {
+          const { data } = await supabase.storage.from('app-files').createSignedUrls(paths, 3600);
+          if (data) {
+            newActiveNote.attachments = activeNote.attachments.map(a => {
+              const signed = data.find(s => s.path === a.url);
+              return signed ? { ...a, url: signed.signedUrl } : a;
+            });
+            updated = true;
+          }
+        }
+      }
+
+      if (updated) {
+        setActiveNote(newActiveNote);
+      }
+    };
+
+    getSignedUrls();
+  }, [activeNote?.id]);
 
   const filteredNotes = activeFolder === 'All' 
     ? notes 
@@ -249,15 +416,22 @@ export default function Notes({ token }: NotesProps) {
                   onChange={(e) => {
                     const newTitle = e.target.value;
                     setActiveNote({ ...activeNote, title: newTitle });
-                    updateNote(activeNote.id, { title: newTitle });
                   }}
                   className="text-2xl font-serif italic font-bold bg-transparent border-none focus:outline-none flex-1"
                   placeholder="Note Title"
                 />
               </div>
               <div className="flex items-center gap-2">
+                <label className="p-2 hover:bg-app-bg rounded-xl transition-colors cursor-pointer text-app-text/60 hover:text-accent">
+                  <ImageIcon size={20} />
+                  <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'cover')} />
+                </label>
+                <label className="p-2 hover:bg-app-bg rounded-xl transition-colors cursor-pointer text-app-text/60 hover:text-accent">
+                  <Paperclip size={20} />
+                  <input type="file" className="hidden" accept=".jpg,.png,.jpeg,.pdf,.mp3" onChange={(e) => handleFileUpload(e, 'attachment')} />
+                </label>
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-app-bg rounded-full text-xs font-bold text-app-text/40">
-                  {isSaving ? <span className="animate-pulse">Saving...</span> : <><Save size={14} /> Saved</>}
+                  {isSaving || isUploading ? <span className="animate-pulse">{isUploading ? 'Uploading...' : 'Saving...'}</span> : <><Save size={14} /> Saved</>}
                 </div>
                 <button 
                   onClick={() => deleteNote(activeNote.id)}
@@ -267,17 +441,61 @@ export default function Notes({ token }: NotesProps) {
                 </button>
               </div>
             </div>
-            <div className="flex-1 p-8">
-              <textarea 
-                value={activeNote.content}
-                onChange={(e) => {
-                  const newContent = e.target.value;
-                  setActiveNote({ ...activeNote, content: newContent });
-                  updateNote(activeNote.id, { content: newContent });
-                }}
-                className="w-full h-full bg-transparent border-none focus:outline-none resize-none text-lg leading-relaxed text-app-text/80 font-medium"
-                placeholder="Start writing your thoughts..."
-              />
+            <div className="flex-1 overflow-y-auto">
+              {activeNote.cover_url && (
+                <div className="relative group w-full h-48 overflow-hidden">
+                  <img src={activeNote.cover_url} alt="Cover" className="w-full h-full object-cover" />
+                  <button 
+                    onClick={() => {
+                      setActiveNote({ ...activeNote, cover_url: '' });
+                      updateNote(activeNote.id, { cover_url: '' });
+                    }}
+                    className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+              <div className="p-8 space-y-6">
+                <textarea 
+                  value={activeNote.content}
+                  onChange={(e) => {
+                    const newContent = e.target.value;
+                    setActiveNote({ ...activeNote, content: newContent });
+                  }}
+                  className="w-full min-h-[300px] bg-transparent border-none focus:outline-none resize-none text-lg leading-relaxed text-app-text/80 font-medium"
+                  placeholder="Start writing your thoughts..."
+                />
+
+                {activeNote.attachments && activeNote.attachments.length > 0 && (
+                  <div className="pt-8 border-t border-border-subtle">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-app-text/40 mb-4">Attachments</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {activeNote.attachments.map(file => (
+                        <div key={file.id} className="flex items-center justify-between p-3 bg-app-bg rounded-xl group border border-transparent hover:border-border-subtle transition-all">
+                          <a href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 flex-1">
+                            <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center text-accent">
+                              {file.type.includes('image') ? <ImageIcon size={18} /> : 
+                               file.type.includes('audio') ? <Music size={18} /> : 
+                               <FileIcon size={18} />}
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className="text-sm font-bold truncate">{file.name}</p>
+                              <p className="text-[10px] text-app-text/40 font-bold uppercase tracking-widest">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                            </div>
+                          </a>
+                          <button 
+                            onClick={() => removeAttachment(file.id)}
+                            className="p-2 text-app-text/20 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </>
         ) : (

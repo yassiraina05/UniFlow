@@ -49,25 +49,27 @@ export default function Todos({ token }: TodosProps) {
     e.preventDefault();
     if (!newTask.trim()) return;
 
-    const { data, error } = await supabase
-      .from('todos')
-      .insert([{ 
-        task: newTask, 
-        due_date: dueDate || null,
-        completed: false 
-      }])
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('todos')
+        .insert([{ 
+          task: newTask, 
+          due_date: dueDate || null,
+          completed: false 
+        }])
+        .select()
+        .single();
 
-    if (error) {
+      if (error) throw error;
+
+      const newTodo = { ...data, dueDate: data.due_date };
+      setTodos([newTodo, ...todos]);
+      setNewTask('');
+      setDueDate('');
+    } catch (error) {
       console.error('Error adding todo:', error);
-      return;
+      alert('Failed to add task. Please try again.');
     }
-
-    const newTodo = { ...data, dueDate: data.due_date };
-    setTodos([newTodo, ...todos]);
-    setNewTask('');
-    setDueDate('');
   };
 
   const toggleTodo = async (id: number, completed: boolean) => {

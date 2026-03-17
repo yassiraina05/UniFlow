@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   User as UserIcon, 
@@ -8,7 +8,8 @@ import {
   Shield, 
   Bell,
   Check,
-  ChevronRight
+  ChevronRight,
+  Camera
 } from 'lucide-react';
 import { User, UserSettings } from '../types';
 import { supabase } from '../supabaseClient';
@@ -33,6 +34,68 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
   const [settings, setSettings] = useState<UserSettings>(user.settings || {});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications'>('general');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    const getAvatarUrl = async () => {
+      if (user.avatar_url) {
+        if (user.avatar_url.startsWith('http')) {
+          setAvatarUrl(user.avatar_url);
+        } else {
+          const { data } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
+          if (data) setAvatarUrl(data.signedUrl);
+        }
+      }
+    };
+    getAvatarUrl();
+  }, [user.avatar_url]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const uuid = Math.random().toString(36).substring(2);
+      const filePath = `${user.id}/profile/avatar/${uuid}.${fileExt}`;
+
+      // Delete old avatar if exists
+      if (user.avatar_url && !user.avatar_url.startsWith('http')) {
+        await supabase.storage.from('app-files').remove([user.avatar_url]);
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from('app-files')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: signedData, error: signedError } = await supabase.storage
+        .from('app-files')
+        .createSignedUrl(filePath, 3600);
+
+      if (signedError) throw signedError;
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: filePath })
+        .eq('id', user.id);
+
+      if (dbError) throw dbError;
+
+      const updatedUser = { ...user, avatar_url: filePath };
+      setUser(updatedUser);
+      setAvatarUrl(signedData.signedUrl);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+    } catch (error) {
+      console.error('Error uploading avatar:', error);
+      alert('Failed to upload avatar.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const updateSettings = (newSettings: UserSettings) => {
     const updated = { ...settings, ...newSettings };
@@ -73,12 +136,26 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex items-center justify-between mb-12">
         <div className="flex items-center gap-6">
-          <button 
-            onClick={() => setActiveTab('general')}
-            className="w-24 h-24 rounded-3xl bg-accent flex items-center justify-center text-white text-4xl font-bold shadow-xl hover:scale-105 transition-transform cursor-pointer"
-          >
-            {(user.name?.[0] || 'U').toUpperCase()}
-          </button>
+          <div className="relative group">
+            <button 
+              className="w-24 h-24 rounded-3xl bg-accent flex items-center justify-center text-white text-4xl font-bold shadow-xl hover:scale-105 transition-transform cursor-pointer overflow-hidden"
+            >
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                (user.name?.[0] || 'U').toUpperCase()
+              )}
+              <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                <Camera size={24} className="text-white" />
+                <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploading} />
+              </label>
+            </button>
+            {isUploading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-3xl">
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
           <div>
             <h2 className="text-3xl font-serif italic font-bold">{user.name || 'User'}</h2>
             <p className="text-app-text/40 font-medium">{user.email}</p>

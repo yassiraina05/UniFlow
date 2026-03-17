@@ -39,23 +39,33 @@ export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isLoading, setIsLoading] = useState(true);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const getAvatarUrl = async () => {
+      if (user?.avatar_url) {
+        if (user.avatar_url.startsWith('http')) {
+          setAvatarUrl(user.avatar_url);
+        } else {
+          const { data } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
+          if (data) setAvatarUrl(data.signedUrl);
+        }
+      } else {
+        setAvatarUrl(null);
+      }
+    };
+    getAvatarUrl();
+  }, [user?.avatar_url]);
 
   useEffect(() => {
     const initSession = async () => {
       console.log('Initializing session...');
-      const timeoutId = setTimeout(() => {
-        console.warn('Session initialization timed out, forcing loading to false');
-        setIsLoading(false);
-      }, 5000); // 5 second safety timeout
-
       try {
         const { data: { session } } = await supabase.auth.getSession();
         console.log('Session result:', session ? 'Session found' : 'No session');
         
         if (session && session.user) {
           // Fetch profile from Supabase
-          // We wrap this in a try-catch or handle error gracefully in case the table doesn't exist yet
           const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
@@ -63,13 +73,14 @@ export default function App() {
             .maybeSingle();
 
           if (profileError) {
-            console.warn('Profile fetch error (table might not exist yet):', profileError);
+            console.warn('Profile fetch error:', profileError);
           }
 
           const appUser: User = {
             id: session.user.id,
             email: session.user.email || '',
             name: profile?.name || session.user.user_metadata?.full_name || 'User',
+            avatar_url: profile?.avatar_url,
             settings: profile?.settings || {}
           };
           setUser(appUser);
@@ -84,10 +95,6 @@ export default function App() {
         }
       } catch (err) {
         console.error('Session initialization failed:', err);
-      } finally {
-        clearTimeout(timeoutId);
-        setIsLoading(false);
-        console.log('Loading set to false');
       }
     };
 
@@ -107,6 +114,7 @@ export default function App() {
             id: session.user.id,
             email: session.user.email || '',
             name: profile?.name || session.user.user_metadata?.full_name || 'User',
+            avatar_url: profile?.avatar_url,
             settings: profile?.settings || {}
           };
           setUser(appUser);
@@ -145,14 +153,17 @@ export default function App() {
 
   const handleLogout = async () => {
     console.log('Logging out...');
-    await supabase.auth.signOut();
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      setToken(null);
+      setUser(null);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
   };
-
-  if (isLoading) return <div className="h-screen w-screen flex items-center justify-center bg-[#F5F5F0]">Loading...</div>;
 
   if (!token || !user) {
     return <Auth onLogin={handleLogin} />;
@@ -245,9 +256,13 @@ export default function App() {
             </div>
             <button 
               onClick={() => setActiveView('profile')}
-              className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:scale-110 transition-transform shadow-sm"
+              className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:scale-110 transition-transform shadow-sm overflow-hidden"
             >
-              {(user.name?.[0] || 'U').toUpperCase()}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                (user.name?.[0] || 'U').toUpperCase()
+              )}
             </button>
           </div>
         </header>
@@ -263,7 +278,7 @@ export default function App() {
               className="max-w-6xl mx-auto h-full"
             >
               {activeView === 'dashboard' && <Dashboard user={user} token={token} onNavigate={setActiveView} />}
-              {activeView === 'notes' && <Notes token={token} />}
+              {activeView === 'notes' && <Notes user={user} token={token} />}
               {activeView === 'todos' && <Todos token={token} />}
               {activeView === 'budget' && <BudgetTracker token={token} />}
               {activeView === 'reminders' && <Reminders token={token} />}

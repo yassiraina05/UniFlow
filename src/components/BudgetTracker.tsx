@@ -58,25 +58,27 @@ export default function BudgetTracker({ token }: BudgetTrackerProps) {
     e.preventDefault();
     if (!category || !amount) return;
 
-    const { data, error } = await supabase
-      .from('budgets')
-      .insert([{ 
-        category, 
-        amount: parseFloat(amount), 
-        type, 
-        date 
-      }])
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from('budgets')
+        .insert([{ 
+          category, 
+          amount: parseFloat(amount), 
+          type, 
+          date 
+        }])
+        .select()
+        .single();
 
-    if (error) {
+      if (error) throw error;
+
+      setBudgets([data, ...budgets]);
+      setCategory('');
+      setAmount('');
+    } catch (error) {
       console.error('Error adding budget:', error);
-      return;
+      alert('Failed to add entry. Please try again.');
     }
-
-    setBudgets([data, ...budgets]);
-    setCategory('');
-    setAmount('');
   };
 
   const deleteBudget = async (id: number) => {

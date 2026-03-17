@@ -35,6 +35,23 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
   });
   const [budgetData, setBudgetData] = useState<any[]>([]);
   const [importantReminder, setImportantReminder] = useState<Reminder | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const getAvatarUrl = async () => {
+      if (user?.avatar_url) {
+        if (user.avatar_url.startsWith('http')) {
+          setAvatarUrl(user.avatar_url);
+        } else {
+          const { data } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
+          if (data) setAvatarUrl(data.signedUrl);
+        }
+      } else {
+        setAvatarUrl(null);
+      }
+    };
+    getAvatarUrl();
+  }, [user?.avatar_url]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -101,9 +118,13 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
         <div className="flex items-center gap-4">
           <button 
             onClick={() => onNavigate('profile')}
-            className="w-16 h-16 rounded-3xl bg-accent flex items-center justify-center text-white text-2xl font-bold shadow-lg hover:scale-105 transition-transform"
+            className="w-16 h-16 rounded-3xl bg-accent flex items-center justify-center text-white text-2xl font-bold shadow-lg hover:scale-105 transition-transform overflow-hidden"
           >
-            {(user.name?.[0] || 'U').toUpperCase()}
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              (user.name?.[0] || 'U').toUpperCase()
+            )}
           </button>
           <div>
             <h2 className="text-3xl font-serif italic font-bold">Welcome back, {(user.name || 'User').split(' ')[0]}</h2>

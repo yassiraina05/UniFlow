@@ -2,6 +2,7 @@ export interface User {
   id: string | number;
   email: string;
   name: string;
+  avatar_url?: string;
   settings: UserSettings;
 }
 
@@ -18,6 +19,15 @@ export interface Note {
   folder: string;
   createdAt: string;
   updatedAt: string;
+  cover_url?: string;
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  name: string;
+  url: string;
+  type: string;
+  size: number;
 }
 
 export interface Todo {
