@@ -44,18 +44,24 @@ export default function App() {
   useEffect(() => {
     const getAvatarUrl = async () => {
       if (user?.avatar_url) {
-        if (user.avatar_url.startsWith('http')) {
-          setAvatarUrl(user.avatar_url);
-        } else {
-          const { data } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
-          if (data) setAvatarUrl(data.signedUrl);
+        try {
+          if (user.avatar_url.startsWith('http')) {
+            setAvatarUrl(user.avatar_url);
+          } else {
+            const { data, error } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
+            if (error) throw error;
+            if (data) setAvatarUrl(data.signedUrl);
+          }
+        } catch (err) {
+          console.error('Error getting avatar signed URL:', err);
+          setAvatarUrl(null);
         }
       } else {
         setAvatarUrl(null);
       }
     };
     getAvatarUrl();
-  }, [user?.avatar_url]);
+  }, [user?.avatar_url, user?.id]);
 
   useEffect(() => {
     const initSession = async () => {
@@ -246,14 +252,6 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-4">
-            <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-app-text/30 group-focus-within:text-accent transition-colors" size={16} />
-              <input 
-                type="text" 
-                placeholder="Search everything..." 
-                className="pl-10 pr-4 py-2 bg-app-bg rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-accent/20 w-64 transition-all"
-              />
-            </div>
             <button 
               onClick={() => setActiveView('profile')}
               className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:scale-110 transition-transform shadow-sm overflow-hidden"
