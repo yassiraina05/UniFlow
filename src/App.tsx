@@ -35,33 +35,35 @@ import Profile from './components/Profile';
 type View = 'dashboard' | 'notes' | 'todos' | 'budget' | 'reminders' | 'profile';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('user');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const getAvatarUrl = async () => {
       if (user?.avatar_url) {
-        try {
-          if (user.avatar_url.startsWith('http')) {
-            setAvatarUrl(user.avatar_url);
-          } else {
-            const { data, error } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
-            if (error) throw error;
-            if (data) setAvatarUrl(data.signedUrl);
-          }
-        } catch (err) {
-          console.error('Error getting avatar signed URL:', err);
-          setAvatarUrl(null);
+        if (user.avatar_url.startsWith('http')) {
+          setAvatarUrl(user.avatar_url);
+        } else {
+          const { data } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
+          if (data) setAvatarUrl(data.signedUrl);
         }
       } else {
         setAvatarUrl(null);
       }
     };
     getAvatarUrl();
-  }, [user?.avatar_url, user?.id]);
+  }, [user?.avatar_url]);
 
   useEffect(() => {
     const initSession = async () => {
@@ -158,6 +160,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     console.log('Logging out...');
     try {
       await supabase.auth.signOut();
@@ -168,6 +171,7 @@ export default function App() {
       setUser(null);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      setIsLoggingOut(false);
     }
   };
 
@@ -231,13 +235,18 @@ export default function App() {
         <div className="p-4 border-t border-border-subtle">
           <button
             onClick={handleLogout}
+            disabled={isLoggingOut}
             className={cn(
-              "w-full flex items-center gap-3 p-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors",
+              "w-full flex items-center gap-3 p-3 rounded-xl text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50",
               !isSidebarOpen && "justify-center"
             )}
           >
-            <LogOut size={20} />
-            {isSidebarOpen && <span className="font-medium">Logout</span>}
+            {isLoggingOut ? (
+              <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <LogOut size={20} />
+            )}
+            {isSidebarOpen && <span className="font-medium">{isLoggingOut ? 'Logging out...' : 'Logout'}</span>}
           </button>
         </div>
       </motion.aside>

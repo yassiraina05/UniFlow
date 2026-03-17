@@ -39,7 +39,7 @@ export default function Notes({ user, token }: NotesProps) {
     fetchNotes();
     const savedFolders = localStorage.getItem('user_folders');
     if (savedFolders) setFolders(JSON.parse(savedFolders));
-  }, []);
+  }, [user.id]);
 
   // Debounced update for content and title
   useEffect(() => {

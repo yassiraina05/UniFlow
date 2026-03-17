@@ -40,24 +40,18 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
   useEffect(() => {
     const getAvatarUrl = async () => {
       if (user?.avatar_url) {
-        try {
-          if (user.avatar_url.startsWith('http')) {
-            setAvatarUrl(user.avatar_url);
-          } else {
-            const { data, error } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
-            if (error) throw error;
-            if (data) setAvatarUrl(data.signedUrl);
-          }
-        } catch (err) {
-          console.error('Error getting avatar signed URL:', err);
-          setAvatarUrl(null);
+        if (user.avatar_url.startsWith('http')) {
+          setAvatarUrl(user.avatar_url);
+        } else {
+          const { data } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
+          if (data) setAvatarUrl(data.signedUrl);
         }
       } else {
         setAvatarUrl(null);
       }
     };
     getAvatarUrl();
-  }, [user?.avatar_url, user?.id]);
+  }, [user?.avatar_url]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,7 +103,7 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
     };
 
     fetchData();
-  }, [user.id, token]);
+  }, [user.id]);
 
   const cards = [
     { id: 'notes', label: 'Total Notes', value: stats.notesCount, icon: FileText, color: 'bg-blue-500/10 text-blue-500' },

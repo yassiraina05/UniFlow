@@ -25,7 +25,7 @@ export default function Todos({ token }: TodosProps) {
 
   useEffect(() => {
     fetchTodos();
-  }, []);
+  }, [token]);
 
   const fetchTodos = async () => {
     const { data, error } = await supabase

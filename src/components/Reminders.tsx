@@ -26,7 +26,7 @@ export default function Reminders({ token }: RemindersProps) {
 
   useEffect(() => {
     fetchReminders();
-  }, []);
+  }, [token]);
 
   const fetchReminders = async () => {
     const { data, error } = await supabase

@@ -39,7 +39,7 @@ export default function BudgetTracker({ token }: BudgetTrackerProps) {
 
   useEffect(() => {
     fetchBudgets();
-  }, []);
+  }, [token]);
 
   const fetchBudgets = async () => {
     const { data, error } = await supabase

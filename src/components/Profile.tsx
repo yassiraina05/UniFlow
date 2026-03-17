@@ -33,31 +33,23 @@ const ACCENT_COLORS = [
 export default function Profile({ user, setUser, token, onLogout }: ProfileProps) {
   const [settings, setSettings] = useState<UserSettings>(user.settings || {});
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications'>('general');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const getAvatarUrl = async () => {
       if (user.avatar_url) {
-        try {
-          if (user.avatar_url.startsWith('http')) {
-            setAvatarUrl(user.avatar_url);
-          } else {
-            const { data, error } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
-            if (error) throw error;
-            if (data) setAvatarUrl(data.signedUrl);
-          }
-        } catch (err) {
-          console.error('Error getting avatar signed URL:', err);
-          setAvatarUrl(null);
+        if (user.avatar_url.startsWith('http')) {
+          setAvatarUrl(user.avatar_url);
+        } else {
+          const { data } = await supabase.storage.from('app-files').createSignedUrl(user.avatar_url, 3600);
+          if (data) setAvatarUrl(data.signedUrl);
         }
-      } else {
-        setAvatarUrl(null);
       }
     };
     getAvatarUrl();
-  }, [user.avatar_url, user.id]);
+  }, [user.avatar_url]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -140,6 +132,12 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
     }
   };
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await onLogout();
+    setIsLoggingOut(false);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex items-center justify-between mb-12">
@@ -174,29 +172,20 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
           </div>
         </div>
         <button 
-          onClick={onLogout}
-          className="px-6 py-3 bg-red-500/10 text-red-500 rounded-2xl font-bold hover:bg-red-500/20 transition-all flex items-center gap-2"
+          onClick={handleLogout}
+          disabled={isLoggingOut}
+          className="px-6 py-3 bg-red-500/10 text-red-500 rounded-2xl font-bold hover:bg-red-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
         >
-          Sign Out
+          {isLoggingOut ? (
+            <div className="w-5 h-5 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+          ) : null}
+          {isLoggingOut ? 'Signing Out...' : 'Sign Out'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Navigation */}
-        <div className="md:col-span-1 space-y-2">
-          <button 
-            onClick={() => setActiveTab('general')}
-            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all font-bold ${activeTab === 'general' ? 'bg-card border-border-subtle shadow-sm text-accent' : 'border-transparent text-app-text/40 hover:bg-card/50'}`}
-          >
-            <div className="flex items-center gap-3">
-              <SettingsIcon size={20} /> General Settings
-            </div>
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
+      <div className="grid grid-cols-1 gap-8">
         {/* Settings Content */}
-        <div className="md:col-span-2 space-y-8">
+        <div className="space-y-8">
           <section className="bg-card p-8 rounded-3xl border border-border-subtle shadow-sm space-y-8">
             <div>
               <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
