@@ -9,14 +9,15 @@ import {
   Clock,
   Filter
 } from 'lucide-react';
-import { Todo } from '../types';
+import { Todo, User } from '../types';
 import { supabase } from '../supabaseClient';
 
 interface TodosProps {
+  user: User;
   token: string;
 }
 
-export default function Todos({ token }: TodosProps) {
+export default function Todos({ user, token }: TodosProps) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTask, setNewTask] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -25,12 +26,13 @@ export default function Todos({ token }: TodosProps) {
 
   useEffect(() => {
     fetchTodos();
-  }, [token]);
+  }, [token, user.id]);
 
   const fetchTodos = async () => {
     const { data, error } = await supabase
       .from('todos')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -55,7 +57,8 @@ export default function Todos({ token }: TodosProps) {
         .insert([{ 
           task: newTask, 
           due_date: dueDate || null,
-          completed: false 
+          completed: false,
+          user_id: user.id
         }])
         .select()
         .single();

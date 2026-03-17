@@ -19,16 +19,17 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import { Budget } from '../types';
+import { Budget, User } from '../types';
 import { supabase } from '../supabaseClient';
 
 interface BudgetTrackerProps {
+  user: User;
   token: string;
 }
 
 const COLORS = ['var(--accent)', '#8E9299', '#141414', '#E4E3E0', '#FF6321'];
 
-export default function BudgetTracker({ token }: BudgetTrackerProps) {
+export default function BudgetTracker({ user, token }: BudgetTrackerProps) {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
@@ -39,12 +40,13 @@ export default function BudgetTracker({ token }: BudgetTrackerProps) {
 
   useEffect(() => {
     fetchBudgets();
-  }, [token]);
+  }, [token, user.id]);
 
   const fetchBudgets = async () => {
     const { data, error } = await supabase
       .from('budgets')
       .select('*')
+      .eq('user_id', user.id)
       .order('date', { ascending: false });
     
     if (error) {
@@ -65,7 +67,8 @@ export default function BudgetTracker({ token }: BudgetTrackerProps) {
           category, 
           amount: parseFloat(amount), 
           type, 
-          date 
+          date,
+          user_id: user.id
         }])
         .select()
         .single();

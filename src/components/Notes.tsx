@@ -82,6 +82,7 @@ export default function Notes({ user, token }: NotesProps) {
     const { data, error } = await supabase
       .from('notes')
       .select('*')
+      .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
     
     if (error) {

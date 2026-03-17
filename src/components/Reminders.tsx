@@ -9,14 +9,15 @@ import {
   CheckCircle2, 
   AlertCircle
 } from 'lucide-react';
-import { Reminder } from '../types';
+import { Reminder, User } from '../types';
 import { supabase } from '../supabaseClient';
 
 interface RemindersProps {
+  user: User;
   token: string;
 }
 
-export default function Reminders({ token }: RemindersProps) {
+export default function Reminders({ user, token }: RemindersProps) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [title, setTitle] = useState('');
   const [remindAt, setRemindAt] = useState('');
@@ -26,12 +27,13 @@ export default function Reminders({ token }: RemindersProps) {
 
   useEffect(() => {
     fetchReminders();
-  }, [token]);
+  }, [token, user.id]);
 
   const fetchReminders = async () => {
     const { data, error } = await supabase
       .from('reminders')
       .select('*')
+      .eq('user_id', user.id)
       .order('remind_at', { ascending: true });
     
     if (error) {
@@ -57,7 +59,8 @@ export default function Reminders({ token }: RemindersProps) {
           title, 
           remind_at: remindAt, 
           priority,
-          completed: false 
+          completed: false,
+          user_id: user.id
         }])
         .select()
         .single();

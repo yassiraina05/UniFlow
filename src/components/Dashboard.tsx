@@ -57,10 +57,10 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
     const fetchData = async () => {
       try {
         const [notesRes, todosRes, budgetRes, remindersRes] = await Promise.all([
-          supabase.from('notes').select('*'),
-          supabase.from('todos').select('*'),
-          supabase.from('budgets').select('*'),
-          supabase.from('reminders').select('*')
+          supabase.from('notes').select('*').eq('user_id', user.id),
+          supabase.from('todos').select('*').eq('user_id', user.id),
+          supabase.from('budgets').select('*').eq('user_id', user.id),
+          supabase.from('reminders').select('*').eq('user_id', user.id)
         ]);
 
         const notes = notesRes.data || [];

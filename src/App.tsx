@@ -286,9 +286,9 @@ export default function App() {
             >
               {activeView === 'dashboard' && <Dashboard user={user} token={token} onNavigate={setActiveView} />}
               {activeView === 'notes' && <Notes user={user} token={token} />}
-              {activeView === 'todos' && <Todos token={token} />}
-              {activeView === 'budget' && <BudgetTracker token={token} />}
-              {activeView === 'reminders' && <Reminders token={token} />}
+              {activeView === 'todos' && <Todos user={user} token={token} />}
+              {activeView === 'budget' && <BudgetTracker user={user} token={token} />}
+              {activeView === 'reminders' && <Reminders user={user} token={token} />}
               {activeView === 'profile' && <Profile user={user} setUser={setUser} token={token} onLogout={handleLogout} />}
             </motion.div>
           </AnimatePresence>
