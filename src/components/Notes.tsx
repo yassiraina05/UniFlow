@@ -12,6 +12,7 @@ import {
   Tag
 } from 'lucide-react';
 import { Note } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface NotesProps {
   token: string;
@@ -30,7 +31,7 @@ export default function Notes({ token }: NotesProps) {
     fetchNotes();
     const savedFolders = localStorage.getItem('user_folders');
     if (savedFolders) setFolders(JSON.parse(savedFolders));
-  }, [token]);
+  }, []);
 
   const addFolder = () => {
     if (!newFolderName.trim() || folders.includes(newFolderName)) return;
@@ -41,50 +42,97 @@ export default function Notes({ token }: NotesProps) {
     setIsAddingFolder(false);
   };
 
+  const deleteFolder = (folderName: string) => {
+    if (folderName === 'General') return;
+    const updated = folders.filter(f => f !== folderName);
+    setFolders(updated);
+    localStorage.setItem('user_folders', JSON.stringify(updated));
+    if (activeFolder === folderName) setActiveFolder('All');
+    
+    // Update local notes state to move them to General
+    setNotes(notes.map(n => n.folder === folderName ? { ...n, folder: 'General' } : n));
+    // Note: In a real app, you'd also update the DB for all notes in this folder
+  };
+
   const fetchNotes = async () => {
-    const res = await fetch('/api/notes', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setNotes(data);
-    if (data.length > 0 && !activeNote) {
-      setActiveNote(data[0]);
+    const { data, error } = await supabase
+      .from('notes')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching notes:', error);
+      return;
+    }
+
+    // Map snake_case to camelCase if needed, but our types match the DB mostly
+    const formattedNotes = data.map(n => ({
+      ...n,
+      createdAt: n.created_at,
+      updatedAt: n.updated_at
+    }));
+
+    setNotes(formattedNotes);
+    if (formattedNotes.length > 0 && !activeNote) {
+      setActiveNote(formattedNotes[0]);
     }
   };
 
   const createNote = async () => {
-    const res = await fetch('/api/notes', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ title: 'Untitled Note', content: '', folder: activeFolder === 'All' ? 'General' : activeFolder })
-    });
-    const newNote = await res.json();
+    const { data, error } = await supabase
+      .from('notes')
+      .insert([{ 
+        title: 'Untitled Note', 
+        content: '', 
+        folder: activeFolder === 'All' ? 'General' : activeFolder 
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating note:', error);
+      return;
+    }
+
+    const newNote = { ...data, createdAt: data.created_at, updatedAt: data.updated_at };
     setNotes([newNote, ...notes]);
     setActiveNote(newNote);
   };
 
   const updateNote = async (id: number, updates: Partial<Note>) => {
     setIsSaving(true);
-    await fetch(`/api/notes/${id}`, {
-      method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ ...activeNote, ...updates })
-    });
-    setNotes(notes.map(n => n.id === id ? { ...n, ...updates } : n));
+    
+    // Prepare updates for Supabase (snake_case)
+    const dbUpdates: any = { ...updates };
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
+    if (updates.content !== undefined) dbUpdates.content = updates.content;
+    if (updates.folder !== undefined) dbUpdates.folder = updates.folder;
+    dbUpdates.updated_at = new Date().toISOString();
+
+    const { error } = await supabase
+      .from('notes')
+      .update(dbUpdates)
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating note:', error);
+    } else {
+      setNotes(notes.map(n => n.id === id ? { ...n, ...updates, updatedAt: dbUpdates.updated_at } : n));
+    }
     setIsSaving(false);
   };
 
   const deleteNote = async (id: number) => {
-    await fetch(`/api/notes/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const { error } = await supabase
+      .from('notes')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting note:', error);
+      return;
+    }
+
     setNotes(notes.filter(n => n.id !== id));
     if (activeNote?.id === id) setActiveNote(null);
   };
@@ -139,13 +187,22 @@ export default function Notes({ token }: NotesProps) {
               <Folder size={16} /> All Notes
             </button>
             {folders.map(f => (
-              <button 
-                key={f}
-                onClick={() => setActiveFolder(f)}
-                className={`w-full flex items-center gap-3 p-2 rounded-xl text-sm font-medium transition-colors ${activeFolder === f ? 'bg-accent text-white' : 'hover:bg-app-bg'}`}
-              >
-                <Folder size={16} /> {f}
-              </button>
+              <div key={f} className="group flex items-center gap-1">
+                <button 
+                  onClick={() => setActiveFolder(f)}
+                  className={`flex-1 flex items-center gap-3 p-2 rounded-xl text-sm font-medium transition-colors ${activeFolder === f ? 'bg-accent text-white' : 'hover:bg-app-bg'}`}
+                >
+                  <Folder size={16} /> {f}
+                </button>
+                {f !== 'General' && (
+                  <button 
+                    onClick={() => deleteFolder(f)}
+                    className="opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         </div>

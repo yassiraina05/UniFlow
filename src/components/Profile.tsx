@@ -11,6 +11,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { User, UserSettings } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface ProfileProps {
   user: User;
@@ -30,12 +31,13 @@ const ACCENT_COLORS = [
 
 export default function Profile({ user, setUser, token, onLogout }: ProfileProps) {
   const [settings, setSettings] = useState<UserSettings>(user.settings || {});
-  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [activeTab, setActiveTab] = useState<'general' | 'security' | 'notifications'>('general');
 
   const updateSettings = (newSettings: UserSettings) => {
     const updated = { ...settings, ...newSettings };
     setSettings(updated);
+    setSaveStatus('idle');
     
     // Immediate preview
     if (newSettings.theme) {
@@ -47,26 +49,23 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
   };
 
   const handleSaveAll = async () => {
-    setIsSaving(true);
+    setSaveStatus('saving');
     try {
-      const res = await fetch('/api/user/settings', {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(settings)
-      });
-      if (res.ok) {
-        const updatedUser = { ...user, settings };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        alert('All changes saved successfully!');
-      }
+      const { error } = await supabase
+        .from('profiles')
+        .update({ settings })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      const updatedUser = { ...user, settings };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
       console.error("Failed to update settings", err);
-    } finally {
-      setIsSaving(false);
+      setSaveStatus('error');
     }
   };
 
@@ -78,10 +77,10 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
             onClick={() => setActiveTab('general')}
             className="w-24 h-24 rounded-3xl bg-accent flex items-center justify-center text-white text-4xl font-bold shadow-xl hover:scale-105 transition-transform cursor-pointer"
           >
-            {user.name[0].toUpperCase()}
+            {(user.name?.[0] || 'U').toUpperCase()}
           </button>
           <div>
-            <h2 className="text-3xl font-serif italic font-bold">{user.name}</h2>
+            <h2 className="text-3xl font-serif italic font-bold">{user.name || 'User'}</h2>
             <p className="text-app-text/40 font-medium">{user.email}</p>
             <div className="flex items-center gap-2 mt-2">
               <span className="px-3 py-1 bg-app-text/5 rounded-full text-[10px] font-bold uppercase tracking-widest text-app-text/40">University Student</span>
@@ -235,10 +234,17 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
           <div className="flex justify-end">
             <button 
               onClick={handleSaveAll}
-              disabled={isSaving}
-              className="px-8 py-3 bg-app-text text-app-bg rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+              disabled={saveStatus === 'saving'}
+              className={`px-8 py-3 rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 ${
+                saveStatus === 'success' ? 'bg-emerald-500 text-white' : 
+                saveStatus === 'error' ? 'bg-red-500 text-white' : 
+                'bg-app-text text-app-bg'
+              }`}
             >
-              {isSaving ? 'Saving Changes...' : 'Save All Changes'}
+              {saveStatus === 'saving' ? 'Saving Changes...' : 
+               saveStatus === 'success' ? 'Changes Saved!' : 
+               saveStatus === 'error' ? 'Error Saving' : 
+               'Save All Changes'}
             </button>
           </div>
         </div>

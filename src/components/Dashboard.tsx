@@ -18,6 +18,7 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { User, Todo, Budget, Reminder } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface DashboardProps {
   user: User;
@@ -39,19 +40,19 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
     const fetchData = async () => {
       try {
         const [notesRes, todosRes, budgetRes, remindersRes] = await Promise.all([
-          fetch('/api/notes', { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch('/api/todos', { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch('/api/budgets', { headers: { 'Authorization': `Bearer ${token}` } }),
-          fetch('/api/reminders', { headers: { 'Authorization': `Bearer ${token}` } })
+          supabase.from('notes').select('*'),
+          supabase.from('todos').select('*'),
+          supabase.from('budgets').select('*'),
+          supabase.from('reminders').select('*')
         ]);
 
-        const notes = await notesRes.json();
-        const todos = await todosRes.json();
-        const budgets = await budgetRes.json();
-        const reminders = await remindersRes.json();
+        const notes = notesRes.data || [];
+        const todos = todosRes.data || [];
+        const budgets = budgetRes.data || [];
+        const reminders = (remindersRes.data || []).map(r => ({ ...r, remindAt: r.remind_at }));
 
         const balance = budgets.reduce((acc: number, curr: Budget) => 
-          curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0);
+          curr.type === 'income' ? acc + Number(curr.amount) : acc - Number(curr.amount), 0);
 
         setStats({
           notesCount: notes.length,
@@ -74,7 +75,7 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
         // Prepare chart data
         const chartData = budgets.slice(-7).map((b: Budget) => ({
           name: b.category,
-          amount: b.amount,
+          amount: Number(b.amount),
           type: b.type
         }));
         setBudgetData(chartData);
@@ -85,7 +86,7 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
     };
 
     fetchData();
-  }, [token]);
+  }, []);
 
   const cards = [
     { id: 'notes', label: 'Total Notes', value: stats.notesCount, icon: FileText, color: 'bg-blue-500/10 text-blue-500' },
@@ -102,10 +103,10 @@ export default function Dashboard({ user, token, onNavigate }: DashboardProps) {
             onClick={() => onNavigate('profile')}
             className="w-16 h-16 rounded-3xl bg-accent flex items-center justify-center text-white text-2xl font-bold shadow-lg hover:scale-105 transition-transform"
           >
-            {user.name[0].toUpperCase()}
+            {(user.name?.[0] || 'U').toUpperCase()}
           </button>
           <div>
-            <h2 className="text-3xl font-serif italic font-bold">Welcome back, {user.name.split(' ')[0]}</h2>
+            <h2 className="text-3xl font-serif italic font-bold">Welcome back, {(user.name || 'User').split(' ')[0]}</h2>
             <p className="text-app-text/40 font-medium">Here's what's happening today.</p>
           </div>
         </div>

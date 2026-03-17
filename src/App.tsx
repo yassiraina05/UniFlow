@@ -43,42 +43,79 @@ export default function App() {
 
   useEffect(() => {
     const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session && session.user) {
-        const appUser: User = {
-          id: session.user.id,
-          email: session.user.email || '',
-          name: session.user.user_metadata?.full_name || 'User',
-          settings: {}
-        };
-        setUser(appUser);
-        setToken(session.access_token);
-        localStorage.setItem('token', session.access_token);
-        localStorage.setItem('user', JSON.stringify(appUser));
-      } else {
-        setToken(null);
-        setUser(null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+      console.log('Initializing session...');
+      const timeoutId = setTimeout(() => {
+        console.warn('Session initialization timed out, forcing loading to false');
+        setIsLoading(false);
+      }, 5000); // 5 second safety timeout
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('Session result:', session ? 'Session found' : 'No session');
+        
+        if (session && session.user) {
+          // Fetch profile from Supabase
+          // We wrap this in a try-catch or handle error gracefully in case the table doesn't exist yet
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          if (profileError) {
+            console.warn('Profile fetch error (table might not exist yet):', profileError);
+          }
+
+          const appUser: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: profile?.name || session.user.user_metadata?.full_name || 'User',
+            settings: profile?.settings || {}
+          };
+          setUser(appUser);
+          setToken(session.access_token);
+          localStorage.setItem('token', session.access_token);
+          localStorage.setItem('user', JSON.stringify(appUser));
+        } else {
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        }
+      } catch (err) {
+        console.error('Session initialization failed:', err);
+      } finally {
+        clearTimeout(timeoutId);
+        setIsLoading(false);
+        console.log('Loading set to false');
       }
-      setIsLoading(false);
     };
 
     initSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session && session.user) {
-        const appUser: User = {
-          id: session.user.id,
-          email: session.user.email || '',
-          name: session.user.user_metadata?.full_name || 'User',
-          settings: {}
-        };
-        setUser(appUser);
-        setToken(session.access_token);
-        localStorage.setItem('token', session.access_token);
-        localStorage.setItem('user', JSON.stringify(appUser));
+        try {
+          // Fetch profile from Supabase
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .maybeSingle();
+
+          const appUser: User = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: profile?.name || session.user.user_metadata?.full_name || 'User',
+            settings: profile?.settings || {}
+          };
+          setUser(appUser);
+          setToken(session.access_token);
+          localStorage.setItem('token', session.access_token);
+          localStorage.setItem('user', JSON.stringify(appUser));
+        } catch (err) {
+          console.error('Auth state change profile fetch failed:', err);
+        }
       } else {
         setToken(null);
         setUser(null);
@@ -99,6 +136,7 @@ export default function App() {
   }, [user]);
 
   const handleLogin = (newToken: string, newUser: User) => {
+    console.log('Handling login...', newUser.email);
     setToken(newToken);
     setUser(newUser);
     localStorage.setItem('token', newToken);
@@ -106,6 +144,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    console.log('Logging out...');
     await supabase.auth.signOut();
     setToken(null);
     setUser(null);
@@ -208,7 +247,7 @@ export default function App() {
               onClick={() => setActiveView('profile')}
               className="w-8 h-8 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold hover:scale-110 transition-transform shadow-sm"
             >
-              {user.name[0].toUpperCase()}
+              {(user.name?.[0] || 'U').toUpperCase()}
             </button>
           </div>
         </header>

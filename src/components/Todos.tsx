@@ -10,6 +10,7 @@ import {
   Filter
 } from 'lucide-react';
 import { Todo } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface TodosProps {
   token: string;
@@ -20,73 +21,120 @@ export default function Todos({ token }: TodosProps) {
   const [newTask, setNewTask] = useState('');
   const [dueDate, setDueDate] = useState('');
 
+  const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('all');
+
   useEffect(() => {
     fetchTodos();
-  }, [token]);
+  }, []);
 
   const fetchTodos = async () => {
-    const res = await fetch('/api/todos', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
-    setTodos(data);
+    const { data, error } = await supabase
+      .from('todos')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching todos:', error);
+      return;
+    }
+
+    const formattedTodos = data.map(t => ({
+      ...t,
+      dueDate: t.due_date
+    }));
+    setTodos(formattedTodos);
   };
 
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.trim()) return;
 
-    const res = await fetch('/api/todos', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ task: newTask, dueDate })
-    });
-    const data = await res.json();
-    setTodos([...todos, data]);
+    const { data, error } = await supabase
+      .from('todos')
+      .insert([{ 
+        task: newTask, 
+        due_date: dueDate || null,
+        completed: false 
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding todo:', error);
+      return;
+    }
+
+    const newTodo = { ...data, dueDate: data.due_date };
+    setTodos([newTodo, ...todos]);
     setNewTask('');
     setDueDate('');
   };
 
   const toggleTodo = async (id: number, completed: boolean) => {
-    await fetch(`/api/todos/${id}`, {
-      method: 'PATCH',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ completed: !completed })
-    });
+    const { error } = await supabase
+      .from('todos')
+      .update({ completed: !completed })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error toggling todo:', error);
+      return;
+    }
+
     setTodos(todos.map(t => t.id === id ? { ...t, completed: !completed } : t));
   };
 
   const deleteTodo = async (id: number) => {
-    await fetch(`/api/todos/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const { error } = await supabase
+      .from('todos')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting todo:', error);
+      return;
+    }
+
     setTodos(todos.filter(t => t.id !== id));
   };
 
   const clearCompleted = async () => {
-    await fetch('/api/todos/completed', {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const { error } = await supabase
+      .from('todos')
+      .delete()
+      .eq('completed', true);
+
+    if (error) {
+      console.error('Error clearing completed todos:', error);
+      return;
+    }
+
     setTodos(todos.filter(t => !t.completed));
   };
 
-  const pendingTodos = todos.filter(t => !t.completed);
-  const completedTodos = todos.filter(t => t.completed);
+  const filteredTodos = todos.filter(t => {
+    if (filter === 'pending') return !t.completed;
+    if (filter === 'completed') return t.completed;
+    return true;
+  });
+
+  const pendingTodos = filteredTodos.filter(t => !t.completed);
+  const completedTodos = filteredTodos.filter(t => t.completed);
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <h2 className="text-3xl font-serif italic font-bold">To-Do List</h2>
-        <div className="flex items-center gap-2 px-4 py-2 bg-card rounded-2xl border border-border-subtle shadow-sm text-sm font-bold text-app-text/40">
-          <Filter size={16} /> Filter
+        <div className="flex items-center gap-2">
+          {(['all', 'pending', 'completed'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-4 py-2 rounded-2xl border border-border-subtle shadow-sm text-xs font-bold uppercase tracking-widest transition-all ${filter === f ? 'bg-accent text-white' : 'bg-card text-app-text/40 hover:bg-app-bg'}`}
+            >
+              {f}
+            </button>
+          ))}
         </div>
       </div>
 

@@ -20,6 +20,7 @@ import {
   Legend
 } from 'recharts';
 import { Budget } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface BudgetTrackerProps {
   token: string;
@@ -34,15 +35,22 @@ export default function BudgetTracker({ token }: BudgetTrackerProps) {
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
+  const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
+
   useEffect(() => {
     fetchBudgets();
-  }, [token]);
+  }, []);
 
   const fetchBudgets = async () => {
-    const res = await fetch('/api/budgets', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await res.json();
+    const { data, error } = await supabase
+      .from('budgets')
+      .select('*')
+      .order('date', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching budgets:', error);
+      return;
+    }
     setBudgets(data);
   };
 
@@ -50,27 +58,46 @@ export default function BudgetTracker({ token }: BudgetTrackerProps) {
     e.preventDefault();
     if (!category || !amount) return;
 
-    const res = await fetch('/api/budgets', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ category, amount: parseFloat(amount), type, date })
-    });
-    const data = await res.json();
+    const { data, error } = await supabase
+      .from('budgets')
+      .insert([{ 
+        category, 
+        amount: parseFloat(amount), 
+        type, 
+        date 
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error adding budget:', error);
+      return;
+    }
+
     setBudgets([data, ...budgets]);
     setCategory('');
     setAmount('');
   };
 
   const deleteBudget = async (id: number) => {
-    await fetch(`/api/budgets/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const { error } = await supabase
+      .from('budgets')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting budget:', error);
+      return;
+    }
+
     setBudgets(budgets.filter(b => b.id !== id));
   };
+
+  const filteredBudgets = budgets.filter(b => {
+    if (filter === 'income') return b.type === 'income';
+    if (filter === 'expense') return b.type === 'expense';
+    return true;
+  });
 
   const totalIncome = budgets.filter(b => b.type === 'income').reduce((acc, b) => acc + b.amount, 0);
   const totalExpense = budgets.filter(b => b.type === 'expense').reduce((acc, b) => acc + b.amount, 0);
@@ -211,12 +238,20 @@ export default function BudgetTracker({ token }: BudgetTrackerProps) {
           <div className="bg-card rounded-3xl border border-border-subtle shadow-sm overflow-hidden">
             <div className="p-6 border-b border-border-subtle flex items-center justify-between">
               <h3 className="font-bold">Recent History</h3>
-              <button className="text-sm font-bold text-accent flex items-center gap-1">
-                <Filter size={14} /> Filter
-              </button>
+              <div className="flex items-center gap-2">
+                {(['all', 'income', 'expense'] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFilter(f)}
+                    className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all ${filter === f ? 'bg-accent text-white' : 'bg-app-bg text-app-text/40 hover:bg-app-bg/80'}`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="divide-y divide-border-subtle">
-              {budgets.map(budget => (
+              {filteredBudgets.map(budget => (
                 <div key={budget.id} className="p-4 flex items-center justify-between hover:bg-app-bg/50 transition-colors group">
                   <div className="flex items-center gap-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${budget.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
