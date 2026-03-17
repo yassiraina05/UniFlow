@@ -70,7 +70,22 @@ export default function App() {
     const initSession = async () => {
       console.log('Initializing session...');
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.warn('Session initialization error:', sessionError.message);
+          // If the refresh token is invalid, we should sign out to clear everything
+          if (sessionError.message.includes('Refresh Token')) {
+            await supabase.auth.signOut();
+            setToken(null);
+            setUser(null);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+          }
+          setIsInitializing(false);
+          return;
+        }
+
         console.log('Session result:', session ? 'Session found' : 'No session');
         
         if (session && session.user) {
