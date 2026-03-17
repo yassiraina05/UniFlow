@@ -46,6 +46,7 @@ export default function BudgetTracker({ user, token }: BudgetTrackerProps) {
     const { data, error } = await supabase
       .from('budgets')
       .select('*')
+      .eq('user_id', user.id)
       .order('date', { ascending: false });
     
     if (error) {
@@ -63,6 +64,7 @@ export default function BudgetTracker({ user, token }: BudgetTrackerProps) {
       const { data, error } = await supabase
         .from('budgets')
         .insert([{ 
+          user_id: user.id,
           category, 
           amount: parseFloat(amount), 
           type, 

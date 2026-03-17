@@ -82,6 +82,7 @@ export default function Notes({ user, token }: NotesProps) {
     const { data, error } = await supabase
       .from('notes')
       .select('*')
+      .eq('user_id', user.id)
       .order('updated_at', { ascending: false });
     
     if (error) {
@@ -108,6 +109,7 @@ export default function Notes({ user, token }: NotesProps) {
       const { data, error } = await supabase
         .from('notes')
         .insert([{ 
+          user_id: user.id,
           title: 'Untitled Note', 
           content: '', 
           folder: activeFolder === 'All' ? 'General' : activeFolder

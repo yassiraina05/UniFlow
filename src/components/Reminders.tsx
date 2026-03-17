@@ -33,6 +33,7 @@ export default function Reminders({ user, token }: RemindersProps) {
     const { data, error } = await supabase
       .from('reminders')
       .select('*')
+      .eq('user_id', user.id)
       .order('remind_at', { ascending: true });
     
     if (error) {
@@ -55,6 +56,7 @@ export default function Reminders({ user, token }: RemindersProps) {
       const { data, error } = await supabase
         .from('reminders')
         .insert([{ 
+          user_id: user.id,
           title, 
           remind_at: remindAt, 
           priority,
