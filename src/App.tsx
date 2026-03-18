@@ -44,11 +44,23 @@ export default function App() {
     }
   });
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [activeView, setActiveView] = useState<View>('dashboard');
+  const [activeView, setActiveView] = useState<View>(() => {
+    const saved = localStorage.getItem('activeView');
+    return (saved as View) || 'dashboard';
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(() => {
+    // Only show full-screen loading if we have a token to verify
+    return !!localStorage.getItem('token');
+  });
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('activeView', activeView);
+    }
+  }, [activeView, user]);
 
   useEffect(() => {
     const getAvatarUrl = async () => {
@@ -74,31 +86,38 @@ export default function App() {
         
         if (sessionError) {
           console.warn('Session initialization error:', sessionError.message);
-          // If the refresh token is invalid, we should sign out to clear everything
           if (sessionError.message.includes('Refresh Token')) {
             await supabase.auth.signOut();
             setToken(null);
             setUser(null);
             localStorage.removeItem('token');
             localStorage.removeItem('user');
+            localStorage.removeItem('activeView');
           }
           setIsInitializing(false);
           return;
         }
 
-        console.log('Session result:', session ? 'Session found' : 'No session');
-        
         if (session && session.user) {
-          // Fetch profile from Supabase
-          const { data: profile, error: profileError } = await supabase
+          // If we have cached user data, we can stop initializing early to show the UI
+          const cachedUser = localStorage.getItem('user');
+          if (cachedUser) {
+            try {
+              const parsed = JSON.parse(cachedUser);
+              if (parsed.id === session.user.id) {
+                setIsInitializing(false);
+              }
+            } catch (e) {
+              console.error('Error parsing cached user:', e);
+            }
+          }
+
+          // Fetch latest profile from Supabase in background
+          const { data: profile } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .maybeSingle();
-
-          if (profileError) {
-            console.warn('Profile fetch error:', profileError);
-          }
 
           const appUser: User = {
             id: session.user.id,
@@ -116,6 +135,7 @@ export default function App() {
           setUser(null);
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          localStorage.removeItem('activeView');
         }
       } catch (err) {
         console.error('Session initialization failed:', err);
@@ -184,6 +204,7 @@ export default function App() {
     setUser(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('activeView');
     try {
       await supabase.auth.signOut();
     } catch (err) {
