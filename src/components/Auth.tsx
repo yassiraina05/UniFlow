@@ -47,6 +47,7 @@ export default function Auth({ onLogin }: AuthProps) {
           id: data.user.id,
           email: data.user.email || '',
           name: data.user.user_metadata?.full_name || name || 'User',
+          avatar_url: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
           settings: {}
         };
         onLogin(data.session.access_token, appUser);

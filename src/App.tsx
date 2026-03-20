@@ -81,6 +81,15 @@ export default function App() {
   useEffect(() => {
     const initSession = async () => {
       console.log('Initializing session...');
+      
+      // Safety timeout to prevent stuck loading screen
+      const timeoutId = setTimeout(() => {
+        if (isInitializing) {
+          console.warn('Initialization safety timeout reached');
+          setIsInitializing(false);
+        }
+      }, 3000);
+
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
@@ -95,24 +104,12 @@ export default function App() {
             localStorage.removeItem('activeView');
           }
           setIsInitializing(false);
+          clearTimeout(timeoutId);
           return;
         }
 
         if (session && session.user) {
-          // If we have cached user data, we can stop initializing early to show the UI
-          const cachedUser = localStorage.getItem('user');
-          if (cachedUser) {
-            try {
-              const parsed = JSON.parse(cachedUser);
-              if (parsed.id === session.user.id) {
-                setIsInitializing(false);
-              }
-            } catch (e) {
-              console.error('Error parsing cached user:', e);
-            }
-          }
-
-          // Fetch latest profile from Supabase in background
+          // Fetch latest profile from Supabase
           const { data: profile } = await supabase
             .from('profiles')
             .select('*')
@@ -123,30 +120,38 @@ export default function App() {
             id: session.user.id,
             email: session.user.email || '',
             name: profile?.name || session.user.user_metadata?.full_name || 'User',
-            avatar_url: profile?.avatar_url,
+            avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
             settings: profile?.settings || {}
           };
+          
           setUser(appUser);
           setToken(session.access_token);
           localStorage.setItem('token', session.access_token);
           localStorage.setItem('user', JSON.stringify(appUser));
+          
+          // Once we have the real user data, we can stop initializing
+          setIsInitializing(false);
         } else {
           setToken(null);
           setUser(null);
           localStorage.removeItem('token');
           localStorage.removeItem('user');
           localStorage.removeItem('activeView');
+          setIsInitializing(false);
         }
       } catch (err) {
         console.error('Session initialization failed:', err);
-      } finally {
         setIsInitializing(false);
+      } finally {
+        clearTimeout(timeoutId);
       }
     };
 
     initSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
+      
       if (session && session.user) {
         try {
           // Fetch profile from Supabase
@@ -160,9 +165,10 @@ export default function App() {
             id: session.user.id,
             email: session.user.email || '',
             name: profile?.name || session.user.user_metadata?.full_name || 'User',
-            avatar_url: profile?.avatar_url,
+            avatar_url: profile?.avatar_url || session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
             settings: profile?.settings || {}
           };
+          
           setUser(appUser);
           setToken(session.access_token);
           localStorage.setItem('token', session.access_token);
@@ -170,11 +176,12 @@ export default function App() {
         } catch (err) {
           console.error('Auth state change profile fetch failed:', err);
         }
-      } else {
+      } else if (event === 'SIGNED_OUT') {
         setToken(null);
         setUser(null);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('activeView');
       }
     });
 
