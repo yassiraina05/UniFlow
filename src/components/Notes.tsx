@@ -66,16 +66,28 @@ export default function Notes({ user, token }: NotesProps) {
     }
   };
 
-  const deleteFolder = (folderName: string) => {
+  const deleteFolder = async (folderName: string) => {
     if (folderName === 'General') return;
-    const updated = folders.filter(f => f !== folderName);
-    setFolders(updated);
-    localStorage.setItem('user_folders', JSON.stringify(updated));
-    if (activeFolder === folderName) setActiveFolder('All');
-    
-    // Update local notes state to move them to General
-    setNotes(notes.map(n => n.folder === folderName ? { ...n, folder: 'General' } : n));
-    // Note: In a real app, you'd also update the DB for all notes in this folder
+    try {
+      const updated = folders.filter(f => f !== folderName);
+      setFolders(updated);
+      localStorage.setItem('user_folders', JSON.stringify(updated));
+      if (activeFolder === folderName) setActiveFolder('All');
+      
+      // Update local notes state to move them to General
+      setNotes(notes.map(n => n.folder === folderName ? { ...n, folder: 'General' } : n));
+      
+      // Update the DB for all notes in this folder to move them to General
+      const { error } = await supabase
+        .from('notes')
+        .update({ folder: 'General' })
+        .eq('user_id', user.id)
+        .eq('folder', folderName);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error deleting folder:', err);
+    }
   };
 
   const fetchNotes = async () => {
