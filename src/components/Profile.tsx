@@ -143,8 +143,8 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
       <div className="flex items-center justify-between mb-12">
         <div className="flex items-center gap-6">
           <div className="relative group">
-            <button 
-              className="w-24 h-24 rounded-3xl bg-accent flex items-center justify-center text-white text-4xl font-bold shadow-xl hover:scale-105 transition-transform cursor-pointer overflow-hidden"
+            <div 
+              className="w-24 h-24 rounded-3xl bg-accent flex items-center justify-center text-white text-4xl font-bold shadow-xl hover:scale-105 transition-transform cursor-pointer overflow-hidden relative"
             >
               {avatarUrl ? (
                 <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
@@ -155,7 +155,7 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
                 <Camera size={24} className="text-white" />
                 <input type="file" className="hidden" accept="image/*" onChange={handleAvatarUpload} disabled={isUploading} />
               </label>
-            </button>
+            </div>
             {isUploading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-3xl">
                 <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -182,7 +182,6 @@ export default function Profile({ user, setUser, token, onLogout }: ProfileProps
           {isLoggingOut ? 'Signing Out...' : 'Sign Out'}
         </button>
       </div>
-
       <div className="grid grid-cols-1 gap-8">
         {/* Settings Content */}
         <div className="space-y-8">

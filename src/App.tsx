@@ -48,7 +48,16 @@ export default function App() {
     const saved = localStorage.getItem('activeView');
     return (saved as View) || 'dashboard';
   });
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    try {
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        return !u.settings?.sidebarCollapsed;
+      }
+    } catch {}
+    return true;
+  });
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isInitializing, setIsInitializing] = useState(() => {
@@ -190,9 +199,12 @@ export default function App() {
 
   useEffect(() => {
     if (user?.settings) {
-      const { theme, accentColor } = user.settings;
+      const { theme, accentColor, sidebarCollapsed } = user.settings;
       document.documentElement.setAttribute('data-theme', theme || 'light');
       document.documentElement.style.setProperty('--accent', accentColor || '#5A5A40');
+      if (sidebarCollapsed !== undefined) {
+        setIsSidebarOpen(!sidebarCollapsed);
+      }
     }
   }, [user]);
 
