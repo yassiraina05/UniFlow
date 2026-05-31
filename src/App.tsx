@@ -17,6 +17,7 @@ import { User } from './types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { supabase } from './supabaseClient';
+import { Analytics } from '@vercel/analytics/react';
 
 // Utility for tailwind classes
 function cn(...inputs: ClassValue[]) {
@@ -363,7 +364,7 @@ export default function App() {
           </AnimatePresence>
         </div>
       </main>
+      <Analytics />
     </div>
   );
 }
-
